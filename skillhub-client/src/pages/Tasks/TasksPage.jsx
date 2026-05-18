@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTasks, useFilters } from '../../hooks/useTasks'
+import { useSubmissions } from '../../hooks/useSubmissions'
+import { getUserId } from '../../auth/keycloak'
 import TaskCard from '../../components/tasks/TaskCard'
 
 const DIFFICULTIES = [
@@ -21,15 +23,29 @@ export default function TasksPage() {
     if (technologyIds.length) initial.technologyIds = technologyIds
     return initial
   })
+  const [onlyMine, setOnlyMine] = useState(false)
 
   useEffect(() => {
-  if (!searchParams.has('tagIds') && !searchParams.has('technologyIds')) {
-    setParams({ page: 1, pageSize: 10 })
-  }
-}, [searchParams])
+    if (!searchParams.has('tagIds') && !searchParams.has('technologyIds')) {
+      setParams({ page: 1, pageSize: 10 })
+    }
+  }, [searchParams])
 
+  const currentUserId = getUserId()
   const { data, isLoading } = useTasks(params)
   const { data: filters } = useFilters()
+
+  const { data: mySubmissions } = useSubmissions(
+    onlyMine && currentUserId ? { userId: currentUserId, pageSize: 200 } : null
+  )
+
+  const myTaskIds = onlyMine
+    ? new Set((mySubmissions?.items ?? []).map(s => s.taskId))
+    : null
+
+  const displayedTasks = myTaskIds
+    ? (data?.items ?? []).filter(t => myTaskIds.has(t.id))
+    : (data?.items ?? [])
 
   const set = (key, value) => setParams(p => ({ ...p, [key]: value, page: 1 }))
 
@@ -54,6 +70,18 @@ export default function TasksPage() {
         <div className="flex gap-8">
 
           <aside className="w-60 shrink-0 space-y-6">
+
+            <div>
+              <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">View</label>
+              <button
+                onClick={() => setOnlyMine(v => !v)}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                  onlyMine ? 'bg-violet-600 text-white' : 'text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                ✓ My tasks
+              </button>
+            </div>
 
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Search</label>
@@ -146,32 +174,37 @@ export default function TasksPage() {
             ) : (
               <>
                 <div className="grid grid-cols-1 gap-4">
-                  {data?.items?.map(task => (
+                  {displayedTasks.map(task => (
                     <TaskCard
                       key={task.id}
                       task={task}
                       onClick={() => navigate(`/tasks/${task.id}`)}
                     />
                   ))}
+                  {onlyMine && displayedTasks.length === 0 && (
+                    <p className="text-slate-500 text-sm">You haven't submitted any tasks yet.</p>
+                  )}
                 </div>
 
-                <div className="flex items-center justify-between mt-8 text-sm text-slate-400">
-                  <button
-                    disabled={params.page <= 1}
-                    onClick={() => setParams(p => ({ ...p, page: p.page - 1 }))}
-                    className="px-4 py-2 rounded-lg bg-slate-900 border border-white/10 hover:border-violet-500/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    ← Prev
-                  </button>
-                  <span>Page {params.page} of {data?.totalPages ?? 1}</span>
-                  <button
-                    disabled={params.page >= (data?.totalPages ?? 1)}
-                    onClick={() => setParams(p => ({ ...p, page: p.page + 1 }))}
-                    className="px-4 py-2 rounded-lg bg-slate-900 border border-white/10 hover:border-violet-500/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Next →
-                  </button>
-                </div>
+                {!onlyMine && (
+                  <div className="flex items-center justify-between mt-8 text-sm text-slate-400">
+                    <button
+                      disabled={params.page <= 1}
+                      onClick={() => setParams(p => ({ ...p, page: p.page - 1 }))}
+                      className="px-4 py-2 rounded-lg bg-slate-900 border border-white/10 hover:border-violet-500/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      ← Prev
+                    </button>
+                    <span>Page {params.page} of {data?.totalPages ?? 1}</span>
+                    <button
+                      disabled={params.page >= (data?.totalPages ?? 1)}
+                      onClick={() => setParams(p => ({ ...p, page: p.page + 1 }))}
+                      className="px-4 py-2 rounded-lg bg-slate-900 border border-white/10 hover:border-violet-500/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

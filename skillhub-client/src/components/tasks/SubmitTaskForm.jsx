@@ -33,6 +33,7 @@ export default function SubmitTaskForm({ task }) {
           userId: keycloak.subject,
           userFirstName: keycloak.tokenParsed?.given_name ?? 'Guest',
           userLastName: keycloak.tokenParsed?.family_name ?? 'User',
+          xpReward: task.xpReward ?? 0,
           files: files.map(f => ({
             deliveryMethodId: f.deliveryMethodId,
             fileUrl: f.fileUrl,
@@ -69,7 +70,7 @@ export default function SubmitTaskForm({ task }) {
               type="text"
               value={file.fileUrl}
               onChange={e => updateFile(index, 'fileUrl', e.target.value)}
-              placeholder="https://github.com/..."
+              placeholder="github.com/..."
               className="flex-1 bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
             />
 

@@ -7,6 +7,8 @@ const sections = [
   { to: '/admin/submissions', label: 'Submissions' },
   { to: '/admin/statuses', label: 'Statuses' },
   { to: '/admin/delivery-methods', label: 'Delivery Methods' },
+  { to: '/admin/analytics', label: 'Analytics' },
+  { to: '/admin/users', label: 'Users' },
 ]
 
 export default function AdminLayout({ children }) {

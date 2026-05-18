@@ -21,3 +21,12 @@ export const submissionMethodService = {
   update: (id, data) => api.put(`/work/submission-methods/${id}`, data),
   delete: (id) => api.delete(`/work/submission-methods/${id}`),
 }
+
+export const userXpService = {
+  getLeaderboard: (params) => api.get('/work/user-xp/leaderboard', { params }),
+  getAllUsers: (params) => api.get('/work/user-xp/users', { params }),
+  getByUser: (userId) => api.get(`/work/user-xp/user/${userId}`),
+  getTotalByUser: (userId) => api.get(`/work/user-xp/user/${userId}/total`),
+  adjust: (data) => api.post('/work/user-xp/adjust', data),
+  rename: (userId, data) => api.put(`/work/user-xp/users/${userId}/rename`, data),
+}

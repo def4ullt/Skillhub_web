@@ -5,6 +5,7 @@ export const useSubmissions = (params) =>
   useQuery({
     queryKey: ['submissions', params],
     queryFn: () => workSubmissionService.getAll(params).then(r => r.data),
+    enabled: params !== null,
   })
 
 export const useSubmissionDetail = (id) =>
