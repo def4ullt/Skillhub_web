@@ -1,25 +1,57 @@
-import { Routes, Route } from 'react-router-dom'
-import Navbar from './components/layout/NavBar'
-import TasksPage from './pages/Tasks/TasksPage'
-import TaskDetailPage from './pages/TaskDetail/TaskDetailPage'
-import TaskCreatePage from './pages/Tasks/TaskCreatePage'
-import SubmissionsPage from './pages/Submissions/SubmissionsPage'
-import SubmissionDetailPage from './pages/Submissions/SubmissionDetailPage'
+  import { useState } from 'react'
+  import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+  import keycloak, { getRole } from './auth/keycloak'
+  import Navbar from './components/layout/Navbar'
+  import LoginPage from './pages/Login/LoginPage'
+  import TasksPage from './pages/Tasks/TasksPage'
+  import TaskDetailPage from './pages/TaskDetail/TaskDetailPage'
+  import TaskCreatePage from './pages/Tasks/TaskCreatePage'
+  import SubmissionsPage from './pages/Submissions/SubmissionsPage'
+  import SubmissionDetailPage from './pages/Submissions/SubmissionDetailPage'
+  import AdminLayout from './pages/Admin/AdminLayout'
+  import AdminTagsPage from './pages/Admin/Tags/AdminTagsPage'
+  import AdminTechnologiesPage from './pages/Admin/Technologies/AdminTechnologiesPage'
+  import AdminStatusesPage from './pages/Admin/Statuses/AdminStatusesPage'
+  import AdminDeliveryMethodsPage from './pages/Admin/DeliveryMethods/AdminDeliveryMethodsPage'
+  import RegisterPage from './pages/Register/RegisterPage'
+  import AdminTasksPage from './pages/Admin/Tasks/AdminTasksPage'
+  import AdminSubmissionsPage from './pages/Admin/Submissions/AdminSubmissionsPage'
 
-function App() {
-  return (
+
+  function App({ authenticated: initialAuth }) {
+    const [authenticated, setAuthenticated] = useState(initialAuth)
+    const [role, setRole] = useState(getRole())
+    const location = useLocation()
+
+    const handleLogin = (role) => {
+      setAuthenticated(true)
+      setRole(role)
+    }
+
+    if (!authenticated) {
+      if (location.pathname === '/register') return <RegisterPage />
+      return <LoginPage onLogin={handleLogin} />
+    }
+
+    return (
     <>
-      <Navbar />
+      <Navbar role={role} />
       <Routes>
         <Route path="/" element={<TasksPage />} />
         <Route path="/tasks/create" element={<TaskCreatePage />} />
         <Route path="/tasks/:id" element={<TaskDetailPage />} />
         <Route path="/submissions" element={<SubmissionsPage />} />
         <Route path="/submissions/:id" element={<SubmissionDetailPage />} />
-        <Route path="/login" element={<div>Login</div>} />
+        <Route path="/admin" element={role === 'admin' ? <Navigate to="/admin/tasks" /> : <Navigate to="/" />} />
+        <Route path="/admin/tasks" element={role === 'admin' ? <AdminLayout><AdminTasksPage /></AdminLayout> : <Navigate to="/" />} />  
+        <Route path="/admin/tags" element={role === 'admin' ? <AdminLayout><AdminTagsPage /></AdminLayout> : <Navigate to="/" />} />
+        <Route path="/admin/technologies" element={role === 'admin' ? <AdminLayout><AdminTechnologiesPage /></AdminLayout> : <Navigate to="/" />} />
+        <Route path="/admin/submissions" element={role === 'admin' ? <AdminLayout><AdminSubmissionsPage /></AdminLayout> : <Navigate to="/" />} />
+        <Route path="/admin/statuses" element={role === 'admin' ? <AdminLayout><AdminStatusesPage /></AdminLayout> : <Navigate to="/" />} />
+        <Route path="/admin/delivery-methods" element={role === 'admin' ? <AdminLayout><AdminDeliveryMethodsPage /></AdminLayout> : <Navigate to="/" />} />
       </Routes>
     </>
   )
-}
+  }
 
-export default App
+  export default App

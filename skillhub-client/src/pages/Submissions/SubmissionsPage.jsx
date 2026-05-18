@@ -1,12 +1,18 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSubmissions, useSubmissionStatuses } from '../../hooks/useSubmissions'
+import { workSubmissionService } from '../../services/workService'
+import keycloak, { getRole, getUserId } from '../../auth/keycloak'
 
 export default function SubmissionsPage() {
   const navigate = useNavigate()
   const [params, setParams] = useState({ pageNumber: 1, pageSize: 10, sortDescending: true })
   const { data, isLoading } = useSubmissions(params)
   const { data: statuses } = useSubmissionStatuses()
+
+  const currentUserId = getUserId()
+  const role = getRole()
 
   const setStatus = (statusId) => {
     setParams(p => {
@@ -16,6 +22,12 @@ export default function SubmissionsPage() {
       return next
     })
   }
+
+  const qc = useQueryClient()
+  const remove = useMutation({
+  mutationFn: (id) => workSubmissionService.delete(id),
+  onSuccess: () => qc.invalidateQueries({ queryKey: ['submissions'] }),
+  })
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -90,24 +102,34 @@ export default function SubmissionsPage() {
               <>
                 <div className="space-y-3">
                   {data?.items?.map(sub => (
-                    <div
-                      key={sub.id}
-                      onClick={() => navigate(`/submissions/${sub.id}`)}
-                      className="bg-slate-900 border border-white/5 rounded-2xl p-5 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:border-violet-500/40 hover:shadow-xl hover:shadow-black/30"
-                    >
-                      <div className="flex items-start justify-between gap-4 mb-2">
-                        <div>
-                          <p className="text-white font-semibold">{sub.taskName}</p>
-                          <p className="text-slate-400 text-sm mt-0.5">
-                            {sub.userFirstName} {sub.userLastName}
-                          </p>
-                        </div>
+                  <div
+                    key={sub.id}
+                    className="bg-slate-900 border border-white/5 rounded-2xl p-5 transition-all duration-300 hover:border-violet-500/40 hover:shadow-xl hover:shadow-black/30"
+                  >
+                    <div className="flex items-start justify-between gap-4 mb-2">
+                      <div
+                        className="flex-1 cursor-pointer"
+                        onClick={() => navigate(`/submissions/${sub.id}`)}
+                      >
+                        <p className="text-white font-semibold">{sub.taskName}</p>
+                        <p className="text-slate-400 text-sm mt-0.5">
+                          {sub.userFirstName} {sub.userLastName}
+                        </p>
                       </div>
-                      <p className="text-slate-500 text-xs">
-                        {new Date(sub.submissionDate).toLocaleDateString()}
-                      </p>
+                      {(role === 'admin' || sub.userId === currentUserId) && (
+                      <button
+                        onClick={() => remove.mutate(sub.id)}
+                        className="text-xs text-red-400 hover:text-red-300 transition-colors shrink-0"
+                      >
+                        Delete
+                      </button>
+                    )}
                     </div>
-                  ))}
+                    <p className="text-slate-500 text-xs">
+                      {new Date(sub.submissionDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                ))}
                 </div>
 
                 <div className="flex items-center justify-between mt-8 text-sm text-slate-400">

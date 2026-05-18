@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import keycloak from '../../auth/keycloak'
 import { useSubmissionMethods, useCreateSubmission } from '../../hooks/useSubmissions'
 
 export default function SubmitTaskForm({ task }) {
@@ -26,19 +27,21 @@ export default function SubmitTaskForm({ task }) {
     }
 
     try {
-      await mutateAsync({
-        taskId: task.id,
-        taskName: task.title,
-        userId: '00000000-0000-0000-0000-000000000001', // тимчасово хардкод поки нема auth
-        userFirstName: 'Guest',
-        userLastName: 'User',
-        files: files.map(f => ({
-          deliveryMethodId: f.deliveryMethodId,
-          fileUrl: f.fileUrl,
-        })),
-      })
+        await mutateAsync({
+          taskId: task.id,
+          taskName: task.title,
+          userId: keycloak.subject,
+          userFirstName: keycloak.tokenParsed?.given_name ?? 'Guest',
+          userLastName: keycloak.tokenParsed?.family_name ?? 'User',
+          files: files.map(f => ({
+            deliveryMethodId: f.deliveryMethodId,
+            fileUrl: f.fileUrl,
+            })),
+          })
       setSuccess(true)
       setFiles([{ deliveryMethodId: '', fileUrl: '' }])
+      console.log('subject:', keycloak.subject)
+      console.log('tokenParsed:', keycloak.tokenParsed)
     } catch {
       setError('Failed to submit')
     }

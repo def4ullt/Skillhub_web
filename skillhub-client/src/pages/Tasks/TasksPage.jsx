@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTasks, useFilters } from '../../hooks/useTasks'
 import TaskCard from '../../components/tasks/TaskCard'
 
@@ -12,7 +12,22 @@ const DIFFICULTIES = [
 
 export default function TasksPage() {
   const navigate = useNavigate()
-  const [params, setParams] = useState({ page: 1, pageSize: 10 })
+  const [searchParams] = useSearchParams()
+  const [params, setParams] = useState(() => {
+    const initial = { page: 1, pageSize: 10 }
+    const tagIds = searchParams.getAll('tagIds')
+    const technologyIds = searchParams.getAll('technologyIds')
+    if (tagIds.length) initial.tagIds = tagIds
+    if (technologyIds.length) initial.technologyIds = technologyIds
+    return initial
+  })
+
+  useEffect(() => {
+  if (!searchParams.has('tagIds') && !searchParams.has('technologyIds')) {
+    setParams({ page: 1, pageSize: 10 })
+  }
+}, [searchParams])
+
   const { data, isLoading } = useTasks(params)
   const { data: filters } = useFilters()
 
@@ -21,11 +36,8 @@ export default function TasksPage() {
   const setDifficulty = (value) => {
     setParams(p => {
       const next = { ...p, page: 1 }
-      if (value === undefined) {
-        delete next.difficulty
-      } else {
-        next.difficulty = value
-      }
+      if (value === undefined) delete next.difficulty
+      else next.difficulty = value
       return next
     })
   }

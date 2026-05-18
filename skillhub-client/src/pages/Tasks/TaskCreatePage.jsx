@@ -40,6 +40,7 @@ export default function TaskCreatePage() {
     setLoading(true)
     setError(null)
     try {
+      console.log(form)
       await taskService.create(form)
       navigate('/')
     } catch {
@@ -112,24 +113,42 @@ export default function TaskCreatePage() {
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Estimated Time (min)</label>
-              <input
-                type="number"
-                value={form.estimatedTimeMinutes}
-                onChange={e => set('estimatedTimeMinutes', +e.target.value)}
-                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
-              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => set('estimatedTimeMinutes', Math.max(5, form.estimatedTimeMinutes - 5))}
+                  className="w-7 h-7 rounded-lg bg-slate-900 border border-white/10 text-slate-400 hover:text-white hover:border-violet-500/50 transition-colors"
+                >
+                  −
+                </button>
+                <span className="text-sm text-white w-12 text-center">{form.estimatedTimeMinutes}</span>
+                <button
+                  onClick={() => set('estimatedTimeMinutes', form.estimatedTimeMinutes + 5)}
+                  className="w-7 h-7 rounded-lg bg-slate-900 border border-white/10 text-slate-400 hover:text-white hover:border-violet-500/50 transition-colors"
+                >
+                  +
+                </button>
+              </div>
             </div>
             <div className="flex-1">
               <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">XP Reward</label>
-              <input
-                type="number"
-                value={form.xpReward}
-                onChange={e => set('xpReward', +e.target.value)}
-                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
-              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => set('xpReward', Math.max(0, form.xpReward - 10))}
+                  className="w-7 h-7 rounded-lg bg-slate-900 border border-white/10 text-slate-400 hover:text-white hover:border-violet-500/50 transition-colors"
+                >
+                  −
+                </button>
+                <span className="text-sm text-white w-12 text-center">{form.xpReward}</span>
+                <button
+                  onClick={() => set('xpReward', form.xpReward + 10)}
+                  className="w-7 h-7 rounded-lg bg-slate-900 border border-white/10 text-slate-400 hover:text-white hover:border-violet-500/50 transition-colors"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
-
+          
           {/* Active */}
           <div className="flex items-center gap-3">
             <button

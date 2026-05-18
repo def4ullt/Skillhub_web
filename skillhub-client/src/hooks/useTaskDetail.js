@@ -6,4 +6,5 @@ export const useTaskDetail = (id) =>
     queryKey: ['task', id],
     queryFn: () => taskService.getById(id).then(r => r.data),
     enabled: !!id,
+    retry: false,
   })

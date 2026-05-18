@@ -1,13 +1,12 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import keycloak, { getRole } from '../../auth/keycloak'
 
-const links = [
-  { to: '/', label: 'Tasks' },
-  { to: '/submissions', label: 'Submissions' },
-  { to: '/tasks/create', label: 'Create Task' },
-]
-
-export default function Navbar() {
+export default function Navbar({ role }) {
+  console.log('navbar role:', role)
   const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const name = keycloak.tokenParsed?.given_name ?? keycloak.tokenParsed?.preferred_username ?? 'User'
+  
 
   return (
     <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur border-b border-white/5">
@@ -17,27 +16,57 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-1">
-          {links.map(link => (
+          <button
+            onClick={() => navigate('/', { replace: true })}
+            className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${
+              pathname === '/' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            Tasks
+          </button>
+          <Link
+            to="/submissions"
+            className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${
+              pathname === '/submissions' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            Submissions
+          </Link>
+          {(role === 'mentor' || role === 'admin') && (
             <Link
-              key={link.to}
-              to={link.to}
+              to="/tasks/create"
               className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${
-                pathname === link.to
-                  ? 'bg-violet-600 text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+                pathname === '/tasks/create' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
-              {link.label}
+              Create Task
             </Link>
-          ))}
+          )}
+          {role === 'admin' && (
+            <Link
+              to="/admin"
+              className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${
+                pathname.startsWith('/admin') ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              Admin
+            </Link>
+          )}
         </div>
-
-        <Link
-          to="/login"
-          className="text-sm px-4 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:border-violet-500/50 hover:text-white transition-colors"
-        >
-          Login
-        </Link>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className="text-sm text-white">{name}</p>
+            <p className="text-xs text-slate-500">{role}</p>
+          </div>
+          <button
+            onClick={() => {localStorage.removeItem('kc_token')
+                            localStorage.removeItem('kc_refresh_token')
+                            keycloak.logout({ redirectUri: 'http://localhost:5173' })}}
+            className="text-sm px-4 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:border-red-500/50 hover:text-red-400 transition-colors"
+          >
+            Logout
+          </button>
+        </div>
       </div>
     </nav>
   )
