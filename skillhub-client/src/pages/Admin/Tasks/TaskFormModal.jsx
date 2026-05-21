@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { taskService } from '../../../services/taskService'
+import { getUserId } from '../../../auth/keycloak'
 
 const DIFFICULTIES = [
   { label: 'Junior', value: 1 },
@@ -40,7 +41,7 @@ export default function TaskFormModal({ task, filters, onClose, onSaved }) {
     setError(null)
     try {
       if (isEdit) await taskService.update(task.id, form)
-      else await taskService.create(form)
+      else await taskService.create({ ...form, authorId: getUserId() })
       onSaved()
     } catch {
       setError('Failed to save task')

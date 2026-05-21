@@ -8,6 +8,12 @@ export const reviewService = {
   delete: (id, requestingUserId, isAdmin) => api.delete('/reviews/reviews', { data: { reviewId: id, requestingUserId, isAdmin } }),
 }
 
+export const submissionReviewService = {
+  getAll: (params) => api.get('/reviews/submission-reviews', { params }),
+  create: (data) => api.post('/reviews/submission-reviews', data),
+  delete: (id) => api.delete(`/reviews/submission-reviews/${id}`),
+}
+
 export const questionService = {
   getAll: (params) => api.get('/reviews/questions', { params }),
   getById: (id) => api.get(`/reviews/questions/${id}`),

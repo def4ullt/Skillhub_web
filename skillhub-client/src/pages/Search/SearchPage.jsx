@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { taskService } from '../../services/taskService'
+import { userXpService } from '../../services/workService'
+import { loadProfile } from '../../utils/userProfile'
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -11,66 +12,75 @@ export default function SearchPage() {
 
   useEffect(() => { setInput(q) }, [q])
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['task-search', q],
-    queryFn: () => taskService.getAll({ title: q, pageSize: 30 }).then(r => r.data),
-    enabled: q.length > 0,
+  const { data: usersData, isLoading } = useQuery({
+    queryKey: ['all-users-search'],
+    queryFn: () => userXpService.getAllUsers({ pageNumber: 1, pageSize: 200 }).then(r => r.data),
   })
 
-  const tasks = data?.items ?? (Array.isArray(data) ? data : [])
+  const allUsers = usersData?.items ?? []
+  const filteredUsers = q
+    ? allUsers.filter(u => `${u.firstName} ${u.lastName}`.toLowerCase().includes(q.toLowerCase()))
+    : allUsers
 
   const handleSubmit = (e) => {
     e.preventDefault()
     const trimmed = input.trim()
-    if (trimmed) setSearchParams({ q: trimmed })
+    setSearchParams(trimmed ? { q: trimmed } : {})
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <div className="max-w-4xl mx-auto px-6 py-10">
+      <div className="max-w-3xl mx-auto px-6 py-10">
+
+        <h1 className="text-2xl font-bold text-white mb-6">Search Users</h1>
 
         <form onSubmit={handleSubmit} className="mb-8">
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Search tasks by name..."
+            placeholder="Search by name..."
             autoFocus
             className="w-full bg-slate-900 border border-white/10 rounded-xl px-5 py-3 text-lg text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50 transition-colors"
           />
         </form>
 
-        {!q ? (
-          <p className="text-slate-500 text-center mt-20">Type something and press Enter to search</p>
-        ) : isLoading ? (
-          <p className="text-slate-500 text-sm">Searching...</p>
-        ) : tasks.length === 0 ? (
-          <p className="text-slate-500 text-center mt-20">No tasks found for "{q}"</p>
+        {isLoading ? (
+          <p className="text-slate-500 text-sm">Loading users...</p>
+        ) : filteredUsers.length === 0 ? (
+          <p className="text-slate-500 text-center mt-20">
+            {q ? `No users found for "${q}"` : 'No users found.'}
+          </p>
         ) : (
           <>
-            <p className="text-slate-400 text-sm mb-4">{tasks.length} task{tasks.length !== 1 ? 's' : ''} found for "{q}"</p>
-            <div className="space-y-3">
-              {tasks.map(task => (
-                <div
-                  key={task.id}
-                  onClick={() => navigate(`/tasks/${task.id}`)}
-                  className="bg-slate-900 border border-white/5 rounded-xl p-5 cursor-pointer hover:border-violet-500/40 hover:shadow-lg hover:shadow-black/20 transition-all"
-                >
-                  <div className="flex items-start justify-between gap-4">
+            {q && (
+              <p className="text-slate-400 text-sm mb-4">
+                {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} found for "{q}"
+              </p>
+            )}
+            <div className="space-y-2">
+              {filteredUsers.map(user => {
+                const { avatar } = loadProfile(user.userId)
+                const initials = (user.firstName?.[0] ?? '?').toUpperCase()
+                return (
+                  <div
+                    key={user.userId}
+                    onClick={() => navigate(`/profile/${user.userId}`)}
+                    className="bg-slate-900 border border-white/5 rounded-xl p-4 cursor-pointer hover:border-violet-500/40 hover:shadow-lg hover:shadow-black/20 transition-all flex items-center gap-4"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-violet-600 overflow-hidden flex items-center justify-center text-sm font-bold text-white shrink-0">
+                      {avatar
+                        ? <img src={avatar} alt="avatar" className="w-full h-full object-cover" />
+                        : initials
+                      }
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-white font-semibold">{task.title}</p>
-                      {task.description && (
-                        <p className="text-slate-400 text-sm mt-1 line-clamp-2">{task.description}</p>
-                      )}
+                      <p className="text-white font-medium">{user.firstName} {user.lastName}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Level {Math.floor((user.totalXp ?? 0) / 500) + 1}</p>
                     </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-violet-400 text-sm font-medium">{task.xpReward ?? task.xpreward ?? 0} XP</span>
-                      {task.difficulty && (
-                        <p className="text-slate-500 text-xs mt-0.5">{task.difficulty}</p>
-                      )}
-                    </div>
+                    <span className="text-sm font-semibold text-violet-400 shrink-0">{user.totalXp ?? 0} XP</span>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </>
         )}

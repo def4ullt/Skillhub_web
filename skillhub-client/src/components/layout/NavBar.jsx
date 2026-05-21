@@ -69,7 +69,6 @@ export default function Navbar({ role }) {
         <div className="flex items-center gap-1">
           {navLink('/', 'Home')}
           {navLink('/tasks', 'Tasks')}
-          {navLink('/submissions', 'Submissions')}
           {navLink('/leaderboard', 'Leaderboard')}
           {role === 'admin' && navLink('/admin', 'Admin')}
         </div>
@@ -79,7 +78,7 @@ export default function Navbar({ role }) {
             <input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search tasks..."
+              placeholder="Search users..."
               className="bg-slate-900 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50 w-44 transition-colors"
             />
           </form>
@@ -105,13 +104,7 @@ export default function Navbar({ role }) {
               <div className="absolute right-0 top-full mt-2 w-52 bg-slate-900 border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden z-50">
                 {dropdownLink('/profile', 'Profile')}
                 {(role === 'mentor' || role === 'admin') && dropdownLink('/tasks/create', 'Create Task')}
-                <button
-                  disabled
-                  className="flex items-center w-full px-4 py-2.5 text-sm text-slate-600 cursor-not-allowed"
-                >
-                  Settings
-                  <span className="ml-auto text-xs text-slate-700">Soon</span>
-                </button>
+                {dropdownLink('/settings', 'Settings')}
                 <div className="border-t border-white/5 my-1" />
                 <button
                   onClick={logout}

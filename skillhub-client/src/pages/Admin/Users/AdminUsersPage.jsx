@@ -1,49 +1,30 @@
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { useAllUsers, useAdjustXp, useRenameUser } from '../../../hooks/useUserXp'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAllUsers } from '../../../hooks/useUserXp'
+import { getKeycloakUsers } from '../../../utils/keycloak'
+import AdminUserEditModal from './AdminUserEditModal'
 
 export default function AdminUsersPage() {
   const [page, setPage] = useState(1)
-  const [adjusting, setAdjusting] = useState(null)
-  const [renaming, setRenaming] = useState(null)
-  const [amount, setAmount] = useState('')
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [error, setError] = useState('')
+  const [editTarget, setEditTarget] = useState(null)
+  const qc = useQueryClient()
 
   const { data, isLoading } = useAllUsers({ pageNumber: page, pageSize: 15 })
-  const qc = useQueryClient()
-  const adjust = useAdjustXp()
-  const rename = useRenameUser()
+
+  const { data: kcUsers = [] } = useQuery({
+    queryKey: ['kc-users'],
+    queryFn: getKeycloakUsers,
+    staleTime: 2 * 60 * 1000,
+  })
+  const kcMap = {}
+  kcUsers.forEach(u => { kcMap[u.id] = u })
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['all-users'] })
     qc.invalidateQueries({ queryKey: ['leaderboard'] })
+    qc.invalidateQueries({ queryKey: ['kc-users'] })
     qc.invalidateQueries({ queryKey: ['user-xp-total'] })
     qc.invalidateQueries({ queryKey: ['user-xp'] })
-  }
-
-  const openAdjust = (user) => { setAdjusting(user); setRenaming(null); setAmount(''); setError('') }
-  const openRename = (user) => { setRenaming(user); setAdjusting(null); setFirstName(user.firstName ?? ''); setLastName(user.lastName ?? ''); setError('') }
-  const cancelAll = () => { setAdjusting(null); setRenaming(null); setAmount(''); setError('') }
-
-  const handleAdjust = (e) => {
-    e.preventDefault()
-    const xpAmount = parseInt(amount, 10)
-    if (isNaN(xpAmount) || xpAmount === 0) { setError('Enter a non-zero number (negative to deduct)'); return }
-    adjust.mutate(
-      { userId: adjusting.userId, xpAmount },
-      { onSuccess: () => { invalidate(); cancelAll() }, onError: () => setError('Failed to adjust XP') }
-    )
-  }
-
-  const handleRename = (e) => {
-    e.preventDefault()
-    if (!firstName.trim()) { setError('First name is required'); return }
-    rename.mutate(
-      { userId: renaming.userId, firstName: firstName.trim(), lastName: lastName.trim() },
-      { onSuccess: () => { invalidate(); cancelAll() }, onError: () => setError('Failed to rename user') }
-    )
   }
 
   return (
@@ -57,74 +38,32 @@ export default function AdminUsersPage() {
       ) : (
         <>
           <div className="space-y-2">
-            {data.items.map(user => (
-              <div key={user.userId} className="bg-slate-900 border border-white/5 rounded-xl p-4">
-                <div className="flex items-center gap-4">
-                  <span className="text-slate-600 text-sm w-8 shrink-0">#{user.rank}</span>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-medium">{user.firstName} {user.lastName}</p>
-                    <p className="text-violet-400 text-sm">{user.totalXp} XP</p>
-                  </div>
-
-                  {adjusting?.userId === user.userId ? (
-                    <form onSubmit={handleAdjust} className="flex items-center gap-2 shrink-0">
-                      <div>
-                        <input
-                          type="number"
-                          value={amount}
-                          onChange={e => { setAmount(e.target.value); setError('') }}
-                          placeholder="±XP"
-                          autoFocus
-                          className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white w-24 focus:outline-none focus:border-violet-500/50 transition-colors"
-                        />
-                        {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
+            {data.items.map(user => {
+              const kc = kcMap[user.userId]
+              const isBlocked = kc?.enabled === false
+              return (
+                <div key={user.userId} className="bg-slate-900 border border-white/5 rounded-xl p-4">
+                  <div className="flex items-center gap-4">
+                    <span className="text-slate-600 text-sm w-8 shrink-0">#{user.rank}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-white font-medium">{user.firstName} {user.lastName}</p>
+                        {isBlocked && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-400">Blocked</span>
+                        )}
                       </div>
-                      <button type="submit" disabled={adjust.isPending} className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-500 disabled:opacity-50 transition-colors">Apply</button>
-                      <button type="button" onClick={cancelAll} className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 text-sm hover:bg-slate-700 transition-colors">Cancel</button>
-                    </form>
-                  ) : renaming?.userId === user.userId ? (
-                    <form onSubmit={handleRename} className="flex items-center gap-2 shrink-0">
-                      <div className="space-y-1">
-                        <div className="flex gap-2">
-                          <input
-                            value={firstName}
-                            onChange={e => { setFirstName(e.target.value); setError('') }}
-                            placeholder="First name"
-                            autoFocus
-                            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white w-28 focus:outline-none focus:border-violet-500/50 transition-colors"
-                          />
-                          <input
-                            value={lastName}
-                            onChange={e => { setLastName(e.target.value); setError('') }}
-                            placeholder="Last name"
-                            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white w-28 focus:outline-none focus:border-violet-500/50 transition-colors"
-                          />
-                        </div>
-                        {error && <p className="text-red-400 text-xs">{error}</p>}
-                      </div>
-                      <button type="submit" disabled={rename.isPending} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-500 disabled:opacity-50 transition-colors">Save</button>
-                      <button type="button" onClick={cancelAll} className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 text-sm hover:bg-slate-700 transition-colors">Cancel</button>
-                    </form>
-                  ) : (
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        onClick={() => openAdjust(user)}
-                        className="px-3 py-1.5 rounded-lg text-sm border border-white/10 text-slate-400 hover:border-violet-500/40 hover:text-white transition-colors"
-                      >
-                        Adjust XP
-                      </button>
-                      <button
-                        onClick={() => openRename(user)}
-                        className="px-3 py-1.5 rounded-lg text-sm border border-white/10 text-slate-400 hover:border-emerald-500/40 hover:text-white transition-colors"
-                      >
-                        Edit Name
-                      </button>
+                      <p className="text-slate-500 text-xs mt-0.5">{user.totalXp} XP{kc?.email ? ` · ${kc.email}` : ''}</p>
                     </div>
-                  )}
+                    <button
+                      onClick={() => setEditTarget({ user, kcUser: kc ?? null })}
+                      className="px-3 py-1.5 rounded-lg text-sm border border-white/10 text-slate-400 hover:border-violet-500/40 hover:text-white transition-colors shrink-0"
+                    >
+                      Edit
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <div className="flex items-center justify-between mt-6 text-sm text-slate-400">
@@ -145,6 +84,15 @@ export default function AdminUsersPage() {
             </button>
           </div>
         </>
+      )}
+
+      {editTarget && (
+        <AdminUserEditModal
+          user={editTarget.user}
+          kcUser={editTarget.kcUser}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => { invalidate(); setEditTarget(null) }}
+        />
       )}
     </div>
   )

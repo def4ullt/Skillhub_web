@@ -1,35 +1,43 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { useSubmissionDetail } from '../../hooks/useSubmissions'
-import { reviewService } from '../../services/reviewService'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useSubmissionDetail, useSubmissionStatuses } from '../../hooks/useSubmissions'
+import { submissionReviewService } from '../../services/reviewService'
+import { workSubmissionService } from '../../services/workService'
 import keycloak, { getRole, getUserId } from '../../auth/keycloak'
 
-function ReviewForm({ taskId, onSuccess }) {
-  const [rating, setRating] = useState(5)
-  const [comment, setComment] = useState('')
+const STATUS_COLORS = {
+  Pending: 'text-yellow-400',
+  Approved: 'text-emerald-400',
+  Rejected: 'text-red-400',
+  InReview: 'text-blue-400',
+  Completed: 'text-violet-400',
+}
+
+function FeedbackForm({ submissionId, taskId, onSuccess }) {
+  const [feedback, setFeedback] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const currentUserId = getUserId()
 
   const handleSubmit = async () => {
     setError(null)
-    if (!comment.trim()) return setError('Comment is required')
+    if (!feedback.trim()) return setError('Feedback is required')
     setLoading(true)
     try {
-      await reviewService.create({
+      await submissionReviewService.create({
+        submissionId,
         taskId,
-        rating,
-        comment,
-        user: {
+        feedback,
+        mentor: {
           userId: currentUserId,
-          firstName: keycloak.tokenParsed?.given_name ?? 'User',
+          firstName: keycloak.tokenParsed?.given_name ?? 'Mentor',
           lastName: keycloak.tokenParsed?.family_name ?? '',
         },
       })
       onSuccess()
     } catch {
-      setError('Failed to submit. You may have already reviewed this task.')
+      setError('Failed to submit feedback.')
     } finally {
       setLoading(false)
     }
@@ -37,21 +45,11 @@ function ReviewForm({ taskId, onSuccess }) {
 
   return (
     <div className="mt-4 space-y-3">
-      <div className="flex items-center gap-3">
-        <label className="text-xs text-slate-400">Rating</label>
-        <select
-          value={rating}
-          onChange={e => setRating(Number(e.target.value))}
-          className="bg-slate-800 border border-white/10 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-violet-500"
-        >
-          {[1,2,3,4,5].map(r => <option key={r} value={r}>{r} ★</option>)}
-        </select>
-      </div>
       <textarea
-        value={comment}
-        onChange={e => setComment(e.target.value)}
-        placeholder="Write your review..."
-        rows={3}
+        value={feedback}
+        onChange={e => setFeedback(e.target.value)}
+        placeholder="Write your feedback for the student..."
+        rows={4}
         className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 resize-none"
       />
       {error && <p className="text-red-400 text-xs">{error}</p>}
@@ -60,7 +58,7 @@ function ReviewForm({ taskId, onSuccess }) {
         disabled={loading}
         className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
       >
-        {loading ? 'Submitting...' : 'Submit Review'}
+        {loading ? 'Submitting...' : 'Send Feedback'}
       </button>
     </div>
   )
@@ -71,19 +69,37 @@ export default function SubmissionDetailPage() {
   const navigate = useNavigate()
   const role = getRole()
   const currentUserId = getUserId()
-  const [showForm, setShowForm] = useState(false)
+  const queryClient = useQueryClient()
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false)
 
   const { data: sub, isLoading, isError } = useSubmissionDetail(id)
+  const { data: statuses } = useSubmissionStatuses()
 
-  const { data: reviewsData, refetch: refetchReviews } = useQuery({
-    queryKey: ['task-reviews', sub?.taskId],
-    queryFn: () => reviewService.getAll({ taskId: sub.taskId, pageSize: 50 }).then(r => r.data),
-    enabled: !!sub?.taskId,
+  const { data: feedbackData, refetch: refetchFeedback } = useQuery({
+    queryKey: ['submission-feedback', id],
+    queryFn: () => submissionReviewService.getAll({ submissionId: id, pageSize: 50 }).then(r => r.data),
+    enabled: !!id,
   })
 
-  const reviews = reviewsData?.items ?? reviewsData ?? []
-  const canReview = role === 'admin' || role === 'mentor'
-  const hasReviewed = reviews.some(r => r.user?.userId?.toString() === currentUserId?.toString())
+  const feedbackList = feedbackData?.items ?? []
+  const isMentor = role === 'mentor' || role === 'admin'
+  const hasFeedback = feedbackList.some(f => f.mentor?.userId?.toString() === currentUserId?.toString())
+
+  const updateStatus = useMutation({
+    mutationFn: ({ statusId }) =>
+      workSubmissionService.update(id, {
+        statusId,
+        approverId: currentUserId,
+        isAdmin: role === 'admin' || role === 'mentor',
+      }).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['submission', id] })
+      queryClient.invalidateQueries({ queryKey: ['submissions'] })
+      queryClient.invalidateQueries({ queryKey: ['activity-submissions'] })
+    },
+  })
+
+  const getStatusId = (name) => statuses?.find(s => s.name === name)?.id
 
   if (isLoading) return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
@@ -96,6 +112,10 @@ export default function SubmissionDetailPage() {
       Failed to load submission.
     </div>
   )
+
+  const currentStatus = sub.workSubmissionStatus?.name ?? 'Unknown'
+  const canChangeStatus = role === 'admin' || (role === 'mentor' && currentStatus !== 'Completed')
+  const isLocked = role === 'mentor' && currentStatus === 'Completed'
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -111,15 +131,15 @@ export default function SubmissionDetailPage() {
         <div className="mb-8">
           <div className="flex items-start justify-between gap-4 mb-2">
             <h1 className="text-xl font-semibold text-white">{sub.taskName}</h1>
-            <span className="text-xs text-violet-400">
-              {sub.workSubmissionStatus?.name ?? 'Unknown'}
+            <span className={`text-xs ${STATUS_COLORS[currentStatus] ?? 'text-slate-400'}`}>
+              {currentStatus}
             </span>
           </div>
           <p className="text-slate-500 text-sm mb-4">
             {sub.userFirstName} {sub.userLastName}
           </p>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <div className="bg-slate-900 border border-white/5 rounded-xl px-4 py-3">
               <p className="text-xs text-slate-500 mb-1">Date</p>
               <p className="text-sm text-white">{new Date(sub.submissionDate).toLocaleDateString()}</p>
@@ -134,10 +154,10 @@ export default function SubmissionDetailPage() {
           </div>
         </div>
 
+        {/* Files */}
         <div className="mb-8">
-          <p className="text-xs text-slate-500 mb-3">Files ({sub.files.length})</p>
-
-          {sub.files.length === 0 ? (
+          <p className="text-xs text-slate-500 mb-3">Files ({sub.files?.length ?? 0})</p>
+          {!sub.files?.length ? (
             <p className="text-slate-600 text-sm">No files attached.</p>
           ) : (
             <div className="space-y-2">
@@ -161,68 +181,94 @@ export default function SubmissionDetailPage() {
           )}
         </div>
 
-        {/* Reviews section */}
+        {/* Status controls */}
+        {canChangeStatus && statuses && (
+          <div className="mb-8 space-y-3">
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => updateStatus.mutate({ statusId: getStatusId('Approved') })}
+                disabled={updateStatus.isPending || currentStatus === 'Approved'}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-sm font-medium transition-colors"
+              >
+                {updateStatus.isPending ? '...' : 'Approve'}
+              </button>
+              <button
+                onClick={() => updateStatus.mutate({ statusId: getStatusId('Rejected') })}
+                disabled={updateStatus.isPending || currentStatus === 'Rejected'}
+                className="px-5 py-2 rounded-xl bg-red-700 hover:bg-red-600 disabled:opacity-40 text-white text-sm font-medium transition-colors"
+              >
+                {updateStatus.isPending ? '...' : 'Reject'}
+              </button>
+              <button
+                onClick={() => updateStatus.mutate({ statusId: getStatusId('InReview') })}
+                disabled={updateStatus.isPending || currentStatus === 'InReview'}
+                className="px-5 py-2 rounded-xl border border-white/10 hover:bg-white/5 disabled:opacity-40 text-white text-sm transition-colors"
+              >
+                {updateStatus.isPending ? '...' : 'Mark In Review'}
+              </button>
+              {role === 'admin' && (
+                <button
+                  onClick={() => updateStatus.mutate({ statusId: getStatusId('Completed') })}
+                  disabled={updateStatus.isPending || currentStatus === 'Completed'}
+                  className="px-5 py-2 rounded-xl bg-violet-700 hover:bg-violet-600 disabled:opacity-40 text-white text-sm font-medium transition-colors"
+                >
+                  {updateStatus.isPending ? '...' : 'Mark Completed'}
+                </button>
+              )}
+            </div>
+            {updateStatus.isError && (
+              <p className="text-red-400 text-xs">
+                Failed to update status. {updateStatus.error?.response?.data?.error ?? ''}
+              </p>
+            )}
+            {updateStatus.isSuccess && (
+              <p className="text-emerald-400 text-xs">Status updated.</p>
+            )}
+          </div>
+        )}
+        {isLocked && (
+          <div className="mb-8 px-4 py-2.5 rounded-lg bg-slate-900 border border-white/5 text-slate-500 text-xs">
+            Status locked — submission is completed
+          </div>
+        )}
+
+        {/* Mentor Feedback */}
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-              Reviews ({reviews.length})
+              Mentor Feedback ({feedbackList.length})
             </h2>
-            {canReview && !hasReviewed && (
+            {isMentor && !hasFeedback && (
               <button
-                onClick={() => setShowForm(v => !v)}
+                onClick={() => setShowFeedbackForm(v => !v)}
                 className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
               >
-                {showForm ? 'Cancel' : '+ Leave Review'}
+                {showFeedbackForm ? 'Cancel' : '+ Add Feedback'}
               </button>
             )}
           </div>
 
-          {showForm && canReview && !hasReviewed && (
+          {showFeedbackForm && isMentor && !hasFeedback && (
             <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 mb-4">
-              <ReviewForm
+              <FeedbackForm
+                submissionId={id}
                 taskId={sub.taskId}
-                onSuccess={() => { setShowForm(false); refetchReviews() }}
+                onSuccess={() => { setShowFeedbackForm(false); refetchFeedback() }}
               />
             </div>
           )}
 
-          {reviews.length === 0 ? (
-            <p className="text-slate-600 text-sm">No reviews yet.</p>
+          {feedbackList.length === 0 ? (
+            <p className="text-slate-600 text-sm">No feedback yet.</p>
           ) : (
             <div className="space-y-3">
-              {reviews.map(review => (
-                <div key={review.id} className="bg-slate-900 border border-white/5 rounded-2xl p-5">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <p className="text-sm text-white font-medium">
-                        {review.user?.firstName} {review.user?.lastName}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-yellow-400 text-xs">
-                          {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
-                        </span>
-                        {review.sentiment && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full border ${
-                            review.sentiment === 'Positive' ? 'text-emerald-400 border-emerald-500/30' :
-                            review.sentiment === 'Negative' ? 'text-red-400 border-red-500/30' :
-                            'text-slate-400 border-white/10'
-                          }`}>
-                            {review.sentiment}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-slate-400 text-sm leading-relaxed">{review.comment}</p>
-                  {review.keyIssues?.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {review.keyIssues.map((issue, i) => (
-                        <span key={i} className="text-xs text-slate-500 bg-slate-800 rounded px-2 py-0.5">
-                          {issue}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+              {feedbackList.map(f => (
+                <div key={f.id} className="bg-slate-900 border border-white/5 rounded-2xl p-5">
+                  <p className="text-sm text-white font-medium mb-1">
+                    {f.mentor?.firstName} {f.mentor?.lastName}
+                    <span className="ml-2 text-xs text-violet-400">mentor</span>
+                  </p>
+                  <p className="text-slate-400 text-sm leading-relaxed">{f.feedback}</p>
                 </div>
               ))}
             </div>

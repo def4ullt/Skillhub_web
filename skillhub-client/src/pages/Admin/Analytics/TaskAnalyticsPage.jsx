@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { workSubmissionService, submissionStatusService } from '../../../services/workService'
+import { useTaskHealthMap, HEALTH_COLOR, HEALTH_LABEL } from '../../../hooks/useTaskHealthMap'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   PieChart, Pie, Cell,
@@ -30,7 +32,7 @@ function useAnalytics() {
   const byTask = {}
   items.forEach(s => {
     if (!byTask[s.taskId]) {
-      byTask[s.taskId] = { name: s.taskName, approved: 0, rejected: 0, pending: 0, total: 0 }
+      byTask[s.taskId] = { id: s.taskId, name: s.taskName, approved: 0, rejected: 0, pending: 0, total: 0 }
     }
     byTask[s.taskId].total++
     if (s.statusId === approvedStatus?.id) byTask[s.taskId].approved++
@@ -45,6 +47,8 @@ const PIE_COLORS = ['#10b981', '#f59e0b', '#ef4444']
 
 export default function TaskAnalyticsPage() {
   const { approved, rejected, pending, total, byTask } = useAnalytics()
+  const healthMap = useTaskHealthMap()
+  const navigate = useNavigate()
 
   const approvalRate = total > 0 ? Math.round((approved / total) * 100) : 0
 
@@ -164,15 +168,22 @@ export default function TaskAnalyticsPage() {
             .sort((a, b) => b.total - a.total)
             .map((t, i) => {
               const rate = t.total > 0 ? Math.round((t.approved / t.total) * 100) : 0
+              const healthInfo = healthMap[t.id]
+              const health = healthInfo?.health ?? 'Neutral'
               return (
                 <div
                   key={i}
-                  className={`px-5 py-4 ${i < byTask.length - 1 ? 'border-b border-white/5' : ''}`}
+                  onClick={() => navigate(`/tasks/${t.id}`)}
+                  className={`px-5 py-4 cursor-pointer hover:bg-slate-800/50 transition-colors ${i < byTask.length - 1 ? 'border-b border-white/5' : ''}`}
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
-                    <p className="text-sm text-white font-medium truncate">{t.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                      <p className="text-sm text-white font-medium truncate">{t.name}</p>
+                      <span className={`text-xs shrink-0 ${HEALTH_COLOR[health]}`}>{HEALTH_LABEL[health]}</span>
+                    </div>
                     <div className="flex items-center gap-3 shrink-0 text-xs">
-                      <span className="text-slate-400">{t.total} total</span>
+                      {healthInfo && <span className="text-slate-500">{healthInfo.count} rev</span>}
+                      <span className="text-slate-400">{t.total} subs</span>
                       <span className={`font-semibold ${rate >= 70 ? 'text-emerald-400' : rate >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
                         {rate}%
                       </span>

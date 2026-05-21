@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import keycloak, { getRole } from '../../auth/keycloak'
 
 export default function LoginPage({ onLogin }) {
@@ -30,7 +30,16 @@ export default function LoginPage({ onLogin }) {
         }
       )
 
-      if (!res.ok) { setError('Invalid username or password'); return }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        const desc = errData.error_description ?? ''
+        if (desc.toLowerCase().includes('disabled') || desc.toLowerCase().includes('blocked')) {
+          setError('Your account has been blocked. Contact an administrator.')
+        } else {
+          setError('Invalid username or password')
+        }
+        return
+      }
 
       const data = await res.json()
       keycloak.token = data.access_token
@@ -98,12 +107,17 @@ export default function LoginPage({ onLogin }) {
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
 
-          <button
-            onClick={() => navigate('/register')}
-            className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors"
-          >
-            Don't have an account? Register
-          </button>
+          <div className="flex justify-between text-xs text-slate-500">
+            <button
+              onClick={() => navigate('/register')}
+              className="hover:text-slate-300 transition-colors"
+            >
+              Don't have an account? Register
+            </button>
+            <Link to="/forgot-password" className="hover:text-violet-400 transition-colors">
+              Forgot password?
+            </Link>
+          </div>
         </div>
       </div>
     </div>

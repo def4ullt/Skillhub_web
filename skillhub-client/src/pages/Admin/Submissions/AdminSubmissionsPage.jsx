@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { workSubmissionService, submissionStatusService } from '../../../services/workService'
 
 const STATUS_COLORS = {
@@ -12,11 +13,12 @@ const STATUS_COLORS = {
 
 export default function AdminSubmissionsPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-submissions', page],
-    queryFn: () => workSubmissionService.getAll({ page, pageSize: 10 }).then(r => r.data),
+    queryFn: () => workSubmissionService.getAll({ pageNumber: page, pageSize: 10 }).then(r => r.data),
   })
 
   const { data: statuses } = useQuery({
@@ -25,7 +27,7 @@ export default function AdminSubmissionsPage() {
   })
 
   const updateStatus = useMutation({
-    mutationFn: ({ id, statusId }) => workSubmissionService.update(id, { statusId }),
+    mutationFn: ({ id, statusId }) => workSubmissionService.update(id, { statusId, isAdmin: true }),
     onSuccess: () => qc.invalidateQueries(['admin-submissions']),
   })
 
@@ -44,7 +46,7 @@ export default function AdminSubmissionsPage() {
 
       <div className="space-y-2">
         {data?.items?.map(sub => (
-          <div key={sub.id} className="bg-slate-900 border border-white/10 rounded-xl px-4 py-3">
+          <div key={sub.id} onClick={() => navigate(`/submissions/${sub.id}`)} className="bg-slate-900 border border-white/10 rounded-xl px-4 py-3 cursor-pointer hover:border-violet-500/30 transition-colors">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white truncate">{sub.taskName}</p>
@@ -56,7 +58,8 @@ export default function AdminSubmissionsPage() {
               <div className="flex items-center gap-2">
                 <select
                   value={sub.statusId}
-                  onChange={e => updateStatus.mutate({ id: sub.id, statusId: e.target.value })}
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => { e.stopPropagation(); updateStatus.mutate({ id: sub.id, statusId: e.target.value }) }}
                   className="bg-slate-800 border border-white/10 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500"
                 >
                   {statuses?.map(s => (
@@ -64,7 +67,7 @@ export default function AdminSubmissionsPage() {
                   ))}
                 </select>
                 <button
-                  onClick={() => remove.mutate(sub.id)}
+                  onClick={e => { e.stopPropagation(); remove.mutate(sub.id) }}
                   className="text-xs text-red-400 hover:text-red-300 transition-colors"
                 >
                   Delete
@@ -79,19 +82,23 @@ export default function AdminSubmissionsPage() {
         ))}
       </div>
 
-      {data?.totalPages > 1 && (
-        <div className="flex gap-2 mt-6">
-          {Array.from({ length: data.totalPages }, (_, i) => i + 1).map(p => (
-            <button
-              key={p}
-              onClick={() => setPage(p)}
-              className={`w-8 h-8 rounded-lg text-sm transition-colors ${
-                p === page ? 'bg-violet-600 text-white' : 'bg-slate-900 border border-white/10 text-slate-400 hover:text-white'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
+      {(data?.hasPrevious || data?.hasNext) && (
+        <div className="flex items-center gap-3 mt-6">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={!data?.hasPrevious}
+            className="px-3 py-1.5 rounded-lg border border-white/10 text-sm text-slate-400 hover:text-white disabled:opacity-30 transition-colors"
+          >
+            ← Prev
+          </button>
+          <span className="text-sm text-slate-500">Page {data?.currentPage} of {data?.totalPages}</span>
+          <button
+            onClick={() => setPage(p => p + 1)}
+            disabled={!data?.hasNext}
+            className="px-3 py-1.5 rounded-lg border border-white/10 text-sm text-slate-400 hover:text-white disabled:opacity-30 transition-colors"
+          >
+            Next →
+          </button>
         </div>
       )}
     </div>

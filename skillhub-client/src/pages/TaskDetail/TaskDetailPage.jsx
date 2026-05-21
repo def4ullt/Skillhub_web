@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTaskDetail, useCreateReview, useUpdateReview, useDeleteReview } from '../../hooks/useTaskDetail'
 import SubmitTaskForm from '../../components/tasks/SubmitTaskForm'
+import TaskFormModal from '../Admin/Tasks/TaskFormModal'
 import keycloak, { getRole, getUserId } from '../../auth/keycloak'
+import { getKeycloakUser } from '../../utils/keycloak'
+import { tagService, technologyService } from '../../services/taskService'
 
 const difficultyLabel = { 1: 'Junior', 2: 'Middle', 3: 'Senior' }
 const difficultyColor = { 1: 'text-emerald-400', 2: 'text-yellow-400', 3: 'text-red-400' }
@@ -15,11 +19,10 @@ const STATUS_COLORS = {
   Completed: 'text-violet-400',
 }
 
-function ReviewForm({ taskId }) {
+function ReviewForm({ taskId, onSuccess }) {
   const [rating, setRating] = useState(5)
   const [comment, setComment] = useState('')
   const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(false)
   const { mutateAsync, isPending } = useCreateReview(taskId)
   const currentUserId = getUserId()
 
@@ -37,16 +40,11 @@ function ReviewForm({ taskId }) {
           lastName: keycloak.tokenParsed?.family_name ?? '',
         },
       })
-      setSuccess(true)
-      setComment('')
+      onSuccess?.()
     } catch {
       setError('Failed to submit review. You may have already reviewed this task.')
     }
   }
-
-  if (success) return (
-    <p className="text-emerald-400 text-sm mt-2">Review submitted successfully!</p>
-  )
 
   return (
     <div className="mt-4 space-y-3">
@@ -87,7 +85,7 @@ function ReviewCard({ review, currentUserId, isAdmin, taskId }) {
   const update = useUpdateReview(taskId)
   const remove = useDeleteReview(taskId)
 
-  const isOwn = review.user?.userId?.toString() === currentUserId?.toString()
+  const isOwn = (review.user?.userId ?? review.userId)?.toString().toLowerCase() === currentUserId?.toString().toLowerCase()
 
   const handleSave = async () => {
     if (!comment.trim()) return
@@ -196,10 +194,25 @@ function ReviewCard({ review, currentUserId, isAdmin, taskId }) {
 export default function TaskDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { data: detail, isLoading, isError } = useTaskDetail(id)
   const role = getRole()
   const currentUserId = getUserId()
   const [showReviewForm, setShowReviewForm] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+
+  const task = detail?.task ?? detail
+  const { data: authorUser } = useQuery({
+    queryKey: ['keycloak-user', task?.authorId],
+    queryFn: () => getKeycloakUser(task.authorId).then(res => res?.user ?? null),
+    enabled: !!task?.authorId && task.authorId !== '00000000-0000-0000-0000-000000000000',
+  })
+  const { data: tags } = useQuery({ queryKey: ['tags'], queryFn: () => tagService.getAll().then(r => r.data) })
+  const { data: technologies } = useQuery({ queryKey: ['technologies'], queryFn: () => technologyService.getAll().then(r => r.data) })
+
+  const authorName = authorUser
+    ? `${authorUser.firstName ?? ''} ${authorUser.lastName ?? ''}`.trim() || null
+    : null
 
   if (isLoading) return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm">
@@ -221,14 +234,35 @@ export default function TaskDetailPage() {
     </div>
   )
 
-  const task = detail?.task ?? detail
   const submissions = detail?.workSubmissions ?? []
   const reviews = detail?.reviews ?? []
 
-  const canReview = role === 'admin' || role === 'mentor'
-  const hasReviewed = reviews.some(r => r.user?.userId === currentUserId)
+  const keywordFreq = {}
+  reviews.forEach(r => {
+    ;(r.keyIssues ?? []).forEach(kw => {
+      keywordFreq[kw] = (keywordFreq[kw] ?? 0) + 1
+    })
+  })
+  const topKeywords = Object.entries(keywordFreq).sort((a, b) => b[1] - a[1]).slice(0, 10)
+
+  const positiveCount = reviews.filter(r => r.sentiment === 'Positive').length
+  const negativeCount = reviews.filter(r => r.sentiment === 'Negative').length
+  const avgRating = reviews.length > 0
+    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+    : 0
+  const taskHealth = reviews.length === 0
+    ? 'Neutral'
+    : avgRating >= 4.0 ? 'Good' : avgRating >= 2.8 ? 'Neutral' : 'Poor'
+
+  const hasReviewed = reviews.some(r => {
+    const rId = (r.user?.userId ?? r.userId)?.toString().toLowerCase()
+    return rId && rId === currentUserId?.toString().toLowerCase()
+  })
+  const canReview = !hasReviewed
+  const canEdit = role === 'admin' || (task?.authorId && currentUserId === task.authorId?.toString())
 
   return (
+    <>
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="max-w-3xl mx-auto px-6 py-10">
 
@@ -244,7 +278,20 @@ export default function TaskDetailPage() {
           <span className={`text-xs ${difficultyColor[task.difficulty] ?? 'text-slate-400'} mb-3 block`}>
             {difficultyLabel[task.difficulty] ?? '—'}
           </span>
-          <h1 className="text-2xl font-semibold text-white mb-4">{task.title}</h1>
+          <div className="flex items-start justify-between gap-4 mb-1">
+            <h1 className="text-2xl font-semibold text-white">{task.title}</h1>
+            {canEdit && (
+              <button
+                onClick={() => setEditOpen(true)}
+                className="shrink-0 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-slate-400 hover:border-violet-500/40 hover:text-white transition-colors"
+              >
+                Edit Task
+              </button>
+            )}
+          </div>
+          {authorName && (
+            <p className="text-xs text-slate-500 mb-3">Created by {authorName}</p>
+          )}
           <p className="text-slate-400 text-sm leading-relaxed mb-6">{task.description}</p>
 
           <div className="flex gap-3 flex-wrap">
@@ -260,6 +307,28 @@ export default function TaskDetailPage() {
               <p className="text-xs text-slate-500 mb-1">Status</p>
               <p className={`text-sm ${task.isActive ? 'text-emerald-400' : 'text-slate-600'}`}>
                 {task.isActive ? 'Active' : 'Inactive'}
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-white/5 rounded-xl px-4 py-3">
+              <p className="text-xs text-slate-500 mb-1">Health</p>
+              <p className={`text-sm font-semibold ${
+                taskHealth === 'Good' ? 'text-emerald-400' :
+                taskHealth === 'Neutral' ? 'text-yellow-400' : 'text-red-400'
+              }`}>
+                {taskHealth === 'Good' ? '★ Good' : taskHealth === 'Neutral' ? '◆ Neutral' : '↓ Poor'}
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-white/5 rounded-xl px-4 py-3">
+              <p className="text-xs text-slate-500 mb-1">Reviews</p>
+              <p className="text-sm text-white">
+                {reviews.length === 0
+                  ? <span className="text-slate-600">none yet</span>
+                  : <span className="flex items-center gap-1.5">
+                      <span className="text-emerald-400">{positiveCount}↑</span>
+                      <span className="text-slate-600">·</span>
+                      <span className="text-red-400">{negativeCount}↓</span>
+                    </span>
+                }
               </p>
             </div>
           </div>
@@ -330,7 +399,7 @@ export default function TaskDetailPage() {
             <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
               Reviews ({reviews.length})
             </h2>
-            {canReview && !hasReviewed && (
+            {canReview && (
               <button
                 onClick={() => setShowReviewForm(v => !v)}
                 className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
@@ -340,9 +409,23 @@ export default function TaskDetailPage() {
             )}
           </div>
 
-          {showReviewForm && canReview && !hasReviewed && (
+          {showReviewForm && canReview && (
             <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 mb-4">
-              <ReviewForm taskId={id} />
+              <ReviewForm taskId={id} onSuccess={() => setShowReviewForm(false)} />
+            </div>
+          )}
+
+          {topKeywords.length > 0 && (
+            <div className="bg-slate-900 border border-white/5 rounded-2xl p-4 mb-4">
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Top Keywords</p>
+              <div className="flex flex-wrap gap-2">
+                {topKeywords.map(([word, count]) => (
+                  <span key={word} className="flex items-center gap-1.5 text-xs bg-slate-800 rounded-full px-3 py-1">
+                    <span className="text-slate-300">{word}</span>
+                    <span className="text-violet-400 font-semibold">{count}</span>
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 
@@ -365,5 +448,18 @@ export default function TaskDetailPage() {
 
       </div>
     </div>
+
+    {editOpen && (
+      <TaskFormModal
+        task={task}
+        filters={{ tags: tags ?? [], technologies: technologies ?? [] }}
+        onClose={() => setEditOpen(false)}
+        onSaved={() => {
+          setEditOpen(false)
+          queryClient.invalidateQueries({ queryKey: ['task-detail', id] })
+        }}
+      />
+    )}
+    </>
   )
 }

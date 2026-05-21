@@ -4,7 +4,7 @@ import { useLeaderboard } from '../../hooks/useUserXp'
 import { getUserId } from '../../auth/keycloak'
 import { workSubmissionService, submissionStatusService } from '../../services/workService'
 
-function useTopTasks() {
+function useLeaderboardData() {
   const { data: statuses } = useQuery({
     queryKey: ['submission-statuses'],
     queryFn: () => submissionStatusService.getAll().then(r => r.data),
@@ -24,11 +24,28 @@ function useTopTasks() {
     byTask[s.taskId].total++
     if (s.statusId === approvedId) byTask[s.taskId].approved++
   })
-
-  return Object.values(byTask)
+  const topTasks = Object.values(byTask)
     .sort((a, b) => b.total - a.total)
     .slice(0, 10)
     .map(t => ({ ...t, approveRate: t.total > 0 ? Math.round((t.approved / t.total) * 100) : 0 }))
+
+  const byUser = {}
+  items.forEach(s => {
+    if (!byUser[s.userId]) byUser[s.userId] = {
+      userId: s.userId,
+      name: `${s.userFirstName ?? ''} ${s.userLastName ?? ''}`.trim() || 'Unknown',
+      total: 0,
+      approved: 0,
+    }
+    byUser[s.userId].total++
+    if (s.statusId === approvedId) byUser[s.userId].approved++
+  })
+  const topSubmitters = Object.values(byUser)
+    .filter(u => u.approved > 0)
+    .sort((a, b) => b.approved - a.approved)
+    .slice(0, 10)
+
+  return { topTasks, topSubmitters }
 }
 
 export default function LeaderboardPage() {
@@ -36,7 +53,7 @@ export default function LeaderboardPage() {
   const { data, isLoading } = useLeaderboard({ pageNumber: page, pageSize: 20 })
   const currentUserId = getUserId()
   const entries = data?.items ?? []
-  const topTasks = useTopTasks()
+  const { topTasks, topSubmitters } = useLeaderboardData()
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -142,6 +159,39 @@ export default function LeaderboardPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Top submitters */}
+        {topSubmitters.length > 0 && (
+          <div>
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-white mb-1">Top Submitters</h2>
+              <p className="text-slate-400 text-sm">Users with most accepted submissions</p>
+            </div>
+            <div className="bg-slate-900 border border-white/5 rounded-2xl overflow-hidden">
+              {topSubmitters.map((user, i) => {
+                const isMe = user.userId === currentUserId
+                return (
+                  <div
+                    key={user.userId}
+                    className={`flex items-center gap-4 px-5 py-4 ${i < topSubmitters.length - 1 ? 'border-b border-white/5' : ''} ${isMe ? 'bg-violet-600/10' : ''}`}
+                  >
+                    <span className="text-slate-600 text-sm font-bold w-7 text-center shrink-0">
+                      {i < 3 ? ['🥇','🥈','🥉'][i] : `#${i + 1}`}
+                    </span>
+                    <p className="text-sm text-white font-medium flex-1 min-w-0 truncate">
+                      {user.name}
+                      {isMe && <span className="text-violet-400 text-xs ml-2">(you)</span>}
+                    </p>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-emerald-400">{user.approved} accepted</p>
+                      <p className="text-xs text-slate-500">{user.total} total</p>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

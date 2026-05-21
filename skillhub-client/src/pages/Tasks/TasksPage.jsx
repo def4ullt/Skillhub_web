@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useTasks, useFilters } from '../../hooks/useTasks'
 import { useSubmissions } from '../../hooks/useSubmissions'
 import { getUserId } from '../../auth/keycloak'
+import { getKeycloakUsers } from '../../utils/keycloak'
+import { useTaskHealthMap } from '../../hooks/useTaskHealthMap'
+import { taskService } from '../../services/taskService'
 import TaskCard from '../../components/tasks/TaskCard'
+
+const EMPTY_GUID = '00000000-0000-0000-0000-000000000000'
 
 const DIFFICULTIES = [
   { label: 'All',    value: undefined },
@@ -35,16 +41,39 @@ export default function TasksPage() {
   const { data, isLoading } = useTasks(params)
   const { data: filters } = useFilters()
 
+  const { data: kcUsers = [] } = useQuery({
+    queryKey: ['kc-users'],
+    queryFn: getKeycloakUsers,
+    staleTime: 5 * 60 * 1000,
+  })
+  const authorMap = {}
+  kcUsers.forEach(u => {
+    authorMap[u.id] = `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || null
+  })
+
+  const healthMap = useTaskHealthMap()
+
   const { data: mySubmissions } = useSubmissions(
     onlyMine && currentUserId ? { userId: currentUserId, pageSize: 200 } : null
   )
 
+  const { data: allTasksData } = useQuery({
+    queryKey: ['all-tasks-mine'],
+    queryFn: () => taskService.getAll({ page: 1, pageSize: 500 }).then(r => r.data),
+    enabled: onlyMine,
+    staleTime: 60 * 1000,
+  })
+
   const myTaskIds = onlyMine
-    ? new Set((mySubmissions?.items ?? []).map(s => s.taskId))
+    ? new Set(
+        (mySubmissions?.items ?? [])
+          .filter(s => s.userId?.toString() === currentUserId?.toString())
+          .map(s => s.taskId)
+      )
     : null
 
   const displayedTasks = myTaskIds
-    ? (data?.items ?? []).filter(t => myTaskIds.has(t.id))
+    ? (allTasksData?.items ?? []).filter(t => myTaskIds.has(t.id))
     : (data?.items ?? [])
 
   const set = (key, value) => setParams(p => ({ ...p, [key]: value, page: 1 }))
@@ -179,6 +208,8 @@ export default function TasksPage() {
                       key={task.id}
                       task={task}
                       onClick={() => navigate(`/tasks/${task.id}`)}
+                      authorName={task.authorId && task.authorId !== EMPTY_GUID ? authorMap[task.authorId] ?? null : null}
+                      taskHealth={healthMap[task.id]?.health ?? 'Neutral'}
                     />
                   ))}
                   {onlyMine && displayedTasks.length === 0 && (

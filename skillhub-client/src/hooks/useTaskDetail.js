@@ -14,7 +14,11 @@ export const useCreateReview = (taskId) => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data) => reviewService.create(data).then(r => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['task-detail', taskId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task-detail', taskId] })
+      qc.invalidateQueries({ queryKey: ['all-reviews-health'] })
+      qc.invalidateQueries({ queryKey: ['my-reviews'] })
+    },
   })
 }
 
@@ -23,7 +27,11 @@ export const useUpdateReview = (taskId) => {
   return useMutation({
     mutationFn: ({ id, rating, comment, requestingUserId, isAdmin }) =>
       reviewService.update(id, { rating, comment, requestingUserId, isAdmin }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['task-detail', taskId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task-detail', taskId] })
+      qc.invalidateQueries({ queryKey: ['all-reviews-health'] })
+      qc.invalidateQueries({ queryKey: ['my-reviews'] })
+    },
   })
 }
 
@@ -32,6 +40,10 @@ export const useDeleteReview = (taskId) => {
   return useMutation({
     mutationFn: ({ id, requestingUserId, isAdmin }) =>
       reviewService.delete(id, requestingUserId, isAdmin),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['task-detail', taskId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task-detail', taskId] })
+      qc.invalidateQueries({ queryKey: ['all-reviews-health'] })
+      qc.invalidateQueries({ queryKey: ['my-reviews'] })
+    },
   })
 }

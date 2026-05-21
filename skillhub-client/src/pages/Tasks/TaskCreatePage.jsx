@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { taskService } from '../../services/taskService'
 import { useFilters } from '../../hooks/useTasks'
+import { getUserId } from '../../auth/keycloak'
 
 const DIFFICULTIES = [
   { label: 'Junior', value: 1 },
@@ -40,8 +41,7 @@ export default function TaskCreatePage() {
     setLoading(true)
     setError(null)
     try {
-      console.log(form)
-      await taskService.create(form)
+      await taskService.create({ ...form, authorId: getUserId() })
       navigate('/')
     } catch {
       setError('Failed to create task')

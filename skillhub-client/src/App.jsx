@@ -21,7 +21,11 @@ import AdminTasksPage from './pages/Admin/Tasks/AdminTasksPage'
 import AdminSubmissionsPage from './pages/Admin/Submissions/AdminSubmissionsPage'
 import TaskAnalyticsPage from './pages/Admin/Analytics/TaskAnalyticsPage'
 import AdminUsersPage from './pages/Admin/Users/AdminUsersPage'
+import AdminReviewsPage from './pages/Admin/Reviews/AdminReviewsPage'
+import AdminActivityPage from './pages/Admin/Activity/AdminActivityPage'
 import SearchPage from './pages/Search/SearchPage'
+import SettingsPage from './pages/Settings/SettingsPage'
+import ForgotPasswordPage from './pages/ForgotPassword/ForgotPasswordPage'
 
 
 function App({ authenticated: initialAuth }) {
@@ -35,7 +39,8 @@ function App({ authenticated: initialAuth }) {
   }
 
   if (!authenticated) {
-    if (location.pathname === '/register') return <RegisterPage />
+    if (location.pathname === '/register')       return <RegisterPage />
+    if (location.pathname === '/forgot-password') return <ForgotPasswordPage />
     return <LoginPage onLogin={handleLogin} />
   }
 
@@ -51,7 +56,9 @@ function App({ authenticated: initialAuth }) {
         <Route path="/submissions/:id" element={<SubmissionDetailPage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/:userId" element={<ProfilePage />} />
         <Route path="/search" element={<SearchPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/admin" element={role === 'admin' ? <Navigate to="/admin/tasks" /> : <Navigate to="/" />} />
         <Route path="/admin/tasks" element={role === 'admin' ? <AdminLayout><AdminTasksPage /></AdminLayout> : <Navigate to="/" />} />
         <Route path="/admin/tags" element={role === 'admin' ? <AdminLayout><AdminTagsPage /></AdminLayout> : <Navigate to="/" />} />
@@ -61,6 +68,8 @@ function App({ authenticated: initialAuth }) {
         <Route path="/admin/delivery-methods" element={role === 'admin' ? <AdminLayout><AdminDeliveryMethodsPage /></AdminLayout> : <Navigate to="/" />} />
         <Route path="/admin/analytics" element={role === 'admin' ? <AdminLayout><TaskAnalyticsPage /></AdminLayout> : <Navigate to="/" />} />
         <Route path="/admin/users" element={role === 'admin' ? <AdminLayout><AdminUsersPage /></AdminLayout> : <Navigate to="/" />} />
+        <Route path="/admin/reviews" element={role === 'admin' ? <AdminLayout><AdminReviewsPage /></AdminLayout> : <Navigate to="/" />} />
+        <Route path="/admin/activity" element={role === 'admin' ? <AdminLayout><AdminActivityPage /></AdminLayout> : <Navigate to="/" />} />
       </Routes>
     </>
   )
